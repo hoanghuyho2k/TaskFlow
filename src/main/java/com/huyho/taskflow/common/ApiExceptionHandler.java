@@ -1,6 +1,7 @@
 package com.huyho.taskflow.common;
 
 import com.huyho.taskflow.project.ProjectNotFoundException;
+import com.huyho.taskflow.task.TaskNotFoundException;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -12,12 +13,19 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+import org.springframework.validation.method.ParameterErrors;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(ProjectNotFoundException.class)
     public ProblemDetail handleProjectNotFound(ProjectNotFoundException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, exception.getMessage());
+    }
+
+    @ExceptionHandler(TaskNotFoundException.class)
+    public ProblemDetail handleTaskNotFound(TaskNotFoundException exception) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, exception.getMessage());
     }
 
@@ -33,5 +41,26 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     public record FieldError(String field, String message) {
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleHandlerMethodValidationException(
+            HandlerMethodValidationException exception, HttpHeaders headers,
+            HttpStatusCode status, WebRequest request) {
+        if (exception.isForReturnValue()) {
+            return super.handleHandlerMethodValidationException(exception, headers, status, request);
+        }
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, "Request validation failed");
+        problem.setProperty("errors", exception.getParameterValidationResults().stream()
+                .flatMap(result -> {
+                    if (result instanceof ParameterErrors errors) {
+                        return errors.getFieldErrors().stream()
+                                .map(error -> new FieldError(error.getField(), error.getDefaultMessage()));
+                    }
+                    return result.getResolvableErrors().stream()
+                            .map(error -> new FieldError(result.getMethodParameter().getParameterName(),
+                                    error.getDefaultMessage()));
+                }).toList());
+        return handleExceptionInternal(exception, problem, headers, status, request);
     }
 }

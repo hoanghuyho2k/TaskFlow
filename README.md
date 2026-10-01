@@ -4,7 +4,7 @@ A Java 21 / Spring Boot backend learning project for project and task management
 The current milestone supports creating, listing, retrieving, updating, and deleting projects through a
 layered REST API backed by PostgreSQL and Flyway migrations.
 Additional domain APIs and event processing will be introduced incrementally.
-Task persistence is now available; Task HTTP endpoints are the next step.
+Task creation, project-scoped listing, and retrieval are also available.
 
 ## Local development
 
@@ -222,6 +222,44 @@ SELECT version, description, success FROM flyway_schema_history ORDER BY install
 Expect successful migrations V1 and V2. Task repository tests verify persistence,
 defaults, project-scoped pagination, foreign-key and enum constraints, blank-title
 rejection, and project deletion cascades. Test writes roll back.
+
+## Create, list, and retrieve tasks
+
+Restart your application to load changes. Use an existing Project ID in place of
+`1` below:
+
+```sh
+curl -i -X POST http://localhost:8080/api/projects/1/tasks \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Build Task API","description":"Create and retrieve tasks"}'
+curl -i 'http://localhost:8080/api/projects/1/tasks?page=0&size=20'
+```
+
+Creation returns `201` with `Location: /api/tasks/<id>`. Retrieve the returned ID:
+
+```sh
+curl -i http://localhost:8080/api/tasks/1
+```
+
+The Task response contains `id`, `projectId`, `title`, `description`, `status`,
+`priority`, and `createdAt`. Title is required, nonblank, and limited to 200
+characters before trimming surrounding whitespace; description is optional and
+limited to 5000. New tasks start as `TODO` with `MEDIUM` priority. The request DTO
+accepts title and description; project selection comes from the URL.
+
+Listing is restricted to the requested Project, ordered by ascending Task ID, and
+uses the same page response fields and size limits as Project listing. A Project
+with no Tasks returns an empty page; a missing Project returns `404` for either
+create or list. Missing Tasks return `404`. Invalid IDs, pagination, request fields,
+or malformed JSON return `400`. Request and method validation include field or
+parameter names in an `errors` array.
+
+`TaskService` loads the Project before constructing the Task. It maps entities to
+DTOs inside its transaction. The response contains only the Project ID, so it does
+not serialize a lazy Project entity or expose JPA relationships. Project selection
+is not yet access control; authentication and membership authorization come later.
+Tests cover defaults, request validation, missing resources, pagination, and
+separation between Projects. Next: Task updates, deletion, and status changes.
 
 ## Troubleshooting
 
