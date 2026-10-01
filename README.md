@@ -333,6 +333,41 @@ Expect `400` and `errors[0].field = "status"`. These handlers cover expected MVC
 request failures and missing resources; unexpected server failures are not turned
 into client validation errors. Next in Milestone 4: OpenAPI documentation.
 
+## OpenAPI and Swagger UI
+
+Restart the application, then open:
+
+- Swagger UI: http://localhost:8080/swagger-ui/index.html
+- OpenAPI JSON: http://localhost:8080/v3/api-docs
+
+Springdoc generates the contract from controller mappings, request/response DTOs,
+Bean Validation constraints, and documentation annotations. `OpenApiConfiguration`
+supplies the API title, version, and description. Only `/api/**` is documented;
+Actuator remains available separately at its existing health URL.
+
+OpenAPI describes endpoints and schemas in a machine-readable format. Swagger UI
+reads that document and provides forms for executing requests. It uses the real
+application and database; POST creates rows and DELETE removes them.
+
+Try the flow in the UI:
+
+1. Expand **Projects**, run `GET /api/projects`, and note a Project ID. Create a
+   Project with POST if necessary.
+2. Under **Project Tasks**, create a Task using that Project ID and a title.
+3. Note the Task ID from the response; under **Tasks**, retrieve it and PATCH
+   its status to `DONE`.
+4. List the Project's Tasks with `status=DONE` to see the result.
+
+Click **Try it out**, fill the fields, then **Execute**. Use IDs returned by the
+API instead of assuming IDs start at 1. POST returns `201`, DELETE `204`, and the
+other successful operations `200`. Expected request failures are documented as
+Problem Details responses. Validation adds an `errors` extension at runtime.
+
+The Maven build checks the generated contract for routes, status codes, DTO
+constraints and enum schemas, and verifies that Swagger UI assets are served.
+Documentation annotations describe behavior; they do not change runtime HTTP
+status codes or enforce validation. Endpoint tests verify the implementation.
+
 ## Troubleshooting
 
 - Docker connection errors: start Docker Desktop and check `docker info`.
