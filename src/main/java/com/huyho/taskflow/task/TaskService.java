@@ -7,6 +7,7 @@ import com.huyho.taskflow.project.ProjectRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -58,11 +59,19 @@ public class TaskService {
     }
 
     @Transactional(readOnly = true)
-    public TaskPageResponse list(Long projectId, int page, int size) {
+    public TaskPageResponse list(Long projectId, int page, int size, TaskStatus status, TaskPriority priority) {
         if (!projects.existsById(projectId)) {
             throw new ProjectNotFoundException(projectId);
         }
-        Page<Task> result = tasks.findByProjectId(projectId, PageRequest.of(page, size, Sort.by("id")));
+        Specification<Task> filter = (root, query, builder) ->
+                builder.equal(root.get("project").get("id"), projectId);
+        if (status != null) {
+            filter = filter.and((root, query, builder) -> builder.equal(root.get("status"), status));
+        }
+        if (priority != null) {
+            filter = filter.and((root, query, builder) -> builder.equal(root.get("priority"), priority));
+        }
+        Page<Task> result = tasks.findAll(filter, PageRequest.of(page, size, Sort.by("id")));
         return new TaskPageResponse(result.getContent().stream().map(TaskResponse::from).toList(),
                 result.getNumber(), result.getSize(), result.getTotalElements(), result.getTotalPages());
     }

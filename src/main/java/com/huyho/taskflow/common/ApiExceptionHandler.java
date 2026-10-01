@@ -15,9 +15,34 @@ import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 import org.springframework.validation.method.ParameterErrors;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.beans.TypeMismatchException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
+
+    @Override
+    protected ResponseEntity<Object> handleTypeMismatch(TypeMismatchException exception,
+            HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, "Request parameter has an invalid value");
+        if (exception instanceof MethodArgumentTypeMismatchException mismatch) {
+            Class<?> type = mismatch.getRequiredType();
+            String message = type != null && type.isEnum()
+                    ? "Must be one of " + java.util.Arrays.toString(type.getEnumConstants())
+                    : "Must have the expected type";
+            problem.setProperty("errors", java.util.List.of(new FieldError(mismatch.getName(), message)));
+        }
+        return handleExceptionInternal(exception, problem, headers, status, request);
+    }
+
+    @Override
+    protected ResponseEntity<Object> handleHttpMessageNotReadable(HttpMessageNotReadableException exception,
+            HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status,
+                "Request body must contain valid JSON with the expected field types and enum values");
+        return handleExceptionInternal(exception, problem, headers, status, request);
+    }
 
     @ExceptionHandler(ProjectNotFoundException.class)
     public ProblemDetail handleProjectNotFound(ProjectNotFoundException exception) {

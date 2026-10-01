@@ -296,6 +296,43 @@ The synchronous Task API is complete for these operations. Assignment remains
 deferred until Users and membership authorization exist. Next is API quality:
 review error contracts, add useful filtering, and document the API.
 
+## Filter tasks and understand errors (Milestone 4)
+
+Status and priority are optional filters on project-scoped listing. Use your actual
+Project ID; for example, with Project 10:
+
+```sh
+curl -i 'http://localhost:8080/api/projects/10/tasks?status=DONE'
+curl -i 'http://localhost:8080/api/projects/10/tasks?priority=HIGH'
+curl -i 'http://localhost:8080/api/projects/10/tasks?status=DONE&priority=HIGH&page=0&size=20'
+```
+
+Combined filters use AND. Status names are `TODO`, `IN_PROGRESS`, and `DONE`;
+priority names are `LOW`, `MEDIUM`, and `HIGH`. Values are case sensitive. Omit
+a filter to include every value; Spring treats an empty enum query value as omitted.
+Filtering occurs in PostgreSQL before pagination, so `totalElements` and
+`totalPages` describe matching Tasks. The Project condition always applies.
+No matches return an empty page with `200`; a missing Project returns `404`.
+
+The repository implements `JpaSpecificationExecutor<Task>`. The service combines
+small predicates for Project, status, and priority instead of creating a separate
+repository method for every filter combination. Existing indexes are sufficient
+for this learning stage; additional indexes should follow measured query needs.
+
+Expected request errors use `application/problem+json` with `title`, `status`,
+`detail`, and `instance`. Validation and invalid query conversions also include
+an `errors` array of field/parameter names and messages. Invalid enum query values
+list the allowed names. Malformed JSON or incorrect body field types get a generic
+message without parser internals. For example:
+
+```sh
+curl -i 'http://localhost:8080/api/projects/10/tasks?status=INVALID'
+```
+
+Expect `400` and `errors[0].field = "status"`. These handlers cover expected MVC
+request failures and missing resources; unexpected server failures are not turned
+into client validation errors. Next in Milestone 4: OpenAPI documentation.
+
 ## Troubleshooting
 
 - Docker connection errors: start Docker Desktop and check `docker info`.

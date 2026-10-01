@@ -36,7 +36,9 @@ public class ProjectTaskController {
     @GetMapping
     public TaskPageResponse list(@PathVariable @Positive Long projectId,
                                 @RequestParam(defaultValue = "0") @Min(0) int page,
-                                @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
-        return service.list(projectId, page, size);
+                                @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
+                                @RequestParam(required = false) TaskStatus status,
+                                @RequestParam(required = false) TaskPriority priority) {
+        return service.list(projectId, page, size, status, priority);
     }
 }
