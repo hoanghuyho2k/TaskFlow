@@ -13,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
@@ -25,6 +27,86 @@ class ProjectApiTests {
 
     @Autowired
     private ProjectRepository repository;
+
+    @Autowired
+    private jakarta.persistence.EntityManager entityManager;
+
+    @Test
+    void updatesStoredDetailsAndPreservesCreationTime() throws Exception {
+        Project project = repository.saveAndFlush(new Project("Original", "Original description"));
+        Long id = project.getId();
+        entityManager.clear();
+        java.time.Instant createdAt = repository.findById(id).orElseThrow().getCreatedAt();
+
+        mvc.perform(put("/api/projects/{id}", id).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"  Updated  \"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Updated"));
+        entityManager.flush();
+        entityManager.clear();
+        Project updated = repository.findById(id).orElseThrow();
+        assertThat(updated.getName()).isEqualTo("Updated");
+        assertThat(updated.getDescription()).isNull();
+        assertThat(updated.getCreatedAt()).isEqualTo(createdAt);
+    }
+
+    @Test
+    void invalidUpdateLeavesStoredProjectUnchanged() throws Exception {
+        Project project = repository.saveAndFlush(new Project("Original", "Keep this"));
+        mvc.perform(put("/api/projects/{id}", project.getId()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"   \"}"))
+                .andExpect(status().isBadRequest());
+        entityManager.clear();
+        assertThat(repository.findById(project.getId()).orElseThrow().getName()).isEqualTo("Original");
+    }
+
+    @Test
+    void deletesProjectAndReturnsNotFoundAfterward() throws Exception {
+        Long id = repository.saveAndFlush(new Project("Delete me", null)).getId();
+        mvc.perform(delete("/api/projects/{id}", id))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(repository.findById(id)).isEmpty();
+        mvc.perform(get("/api/projects/{id}", id)).andExpect(status().isNotFound());
+        mvc.perform(delete("/api/projects/{id}", id)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void updateOfMissingProjectReturnsNotFound() throws Exception {
+        mvc.perform(put("/api/projects/9223372036854775807").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Valid name\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void listsProjectsWithPaginationAndStableOrdering() throws Exception {
+        // Existing manual projects may be present; compare with the actual ordered IDs.
+        repository.saveAndFlush(new Project("First test project", null));
+        repository.saveAndFlush(new Project("Second test project", null));
+        var ordered = repository.findAll(org.springframework.data.domain.Sort.by("id"));
+        mvc.perform(get("/api/projects").param("page", "0").param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(ordered.getFirst().getId()))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(1))
+                .andExpect(jsonPath("$.totalElements").value(ordered.size()))
+                .andExpect(jsonPath("$.totalPages").value(ordered.size()));
+        mvc.perform(get("/api/projects").param("page", "1").param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(ordered.get(1).getId()));
+        mvc.perform(get("/api/projects").param("page", String.valueOf(ordered.size())).param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isEmpty());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"page=-1", "size=0", "size=101", "page=abc"})
+    void rejectsInvalidPagination(String query) throws Exception {
+        mvc.perform(get("/api/projects?" + query)).andExpect(status().isBadRequest());
+    }
 
     @Test
     void createsAndRetrievesProject() throws Exception {

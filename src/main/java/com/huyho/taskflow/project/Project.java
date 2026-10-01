@@ -45,6 +45,11 @@ public class Project {
         return id;
     }
 
+    public void updateDetails(String name, String description) {
+        this.name = name;
+        this.description = description;
+    }
+
     public String getName() {
         return name;
     }

@@ -1,7 +1,7 @@
 # TaskFlow
 
 A Java 21 / Spring Boot backend learning project for project and task management.
-The current milestone supports creating and retrieving projects through a
+The current milestone supports creating, listing, retrieving, updating, and deleting projects through a
 layered REST API backed by PostgreSQL and Flyway migrations.
 Additional domain APIs and event processing will be introduced incrementally.
 
@@ -141,7 +141,45 @@ bean. The records define immutable API data; JPA entities represent persisted
 state. `ApiExceptionHandler` translates a missing project to `404` and delegates
 standard MVC failures to Spring's `ResponseEntityExceptionHandler`.
 
-Next in Milestone 2: listing, updating, and deleting projects.
+## List, update, and delete projects
+
+```sh
+curl -i 'http://localhost:8080/api/projects?page=0&size=20'
+```
+
+Listing returns `content`, `page`, `size`, `totalElements`, and `totalPages`.
+Pages start at zero, size defaults to 20 and must be between 1 and 100, and results
+are sorted by ascending ID. An empty or out-of-range page returns `200` with an
+empty `content` array. Invalid pagination parameters return `400`.
+
+Use the ID of a project you created in the following commands (replace `1`):
+
+```sh
+curl -i -X PUT http://localhost:8080/api/projects/1 \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"TaskFlow updated","description":"Updated description"}'
+curl -i http://localhost:8080/api/projects/1
+curl -i -X DELETE http://localhost:8080/api/projects/1
+curl -i http://localhost:8080/api/projects/1
+```
+
+PUT returns `200` and replaces the editable fields. Name is required; omitted or
+null description clears the previous description. The same length and blank-name
+rules apply as creation. ID and `createdAt` stay unchanged. Missing projects return
+`404`; PUT does not create a project at a supplied ID. DELETE permanently removes
+the project, returns `204` with no body, and subsequent GET or DELETE returns `404`.
+
+Update loads a managed entity inside a service transaction and calls
+`updateDetails`. Hibernate's dirty checking detects changed fields and writes an
+UPDATE when the transaction flushes; an extra repository `save` call is unnecessary.
+Repository tests flush and clear the persistence context before re-reading to
+verify database state. These tests roll back, so manual projects remain intact.
+Concurrent updates currently use last-write-wins; optimistic locking is a future
+design decision. Offset pagination gives stable ordering but not a snapshot
+across requests when other clients insert or delete projects.
+
+Milestone 2's basic Project CRUD is complete. Next is the Task domain and its
+relationship to Project. Ownership and access control will follow with authentication.
 
 ## Troubleshooting
 
