@@ -1,7 +1,8 @@
 # TaskFlow
 
 A Java 21 / Spring Boot backend learning project for project and task management.
-The current milestone establishes PostgreSQL connectivity and application health.
+The current milestone adds the Project persistence model and a Flyway migration
+on top of PostgreSQL connectivity and application health.
 Domain APIs and event processing will be introduced incrementally.
 
 ## Local development
@@ -34,7 +35,10 @@ Stop the application with Ctrl+C before building:
 
 The generated `@SpringBootTest` loads the application context and connects to
 the Compose database. Keep PostgreSQL running for this test. It is a foundation
-smoke test, not yet an isolated database integration test suite.
+smoke test. Project repository tests also exercise real PostgreSQL writes and
+reads, rolling back their transactions. Identity sequences may still advance.
+These tests currently use the local database; isolated Testcontainers tests will
+follow in the testing milestone.
 
 ## How the foundation works
 
@@ -52,10 +56,44 @@ defaults. Override `DB_URL`, `DB_USERNAME` and `DB_PASSWORD` for other environme
 do not use the local credentials for deployment. Spring does not automatically
 load a `.env` file; export overrides in the shell that launches Java.
 
-`ddl-auto=validate` prevents Hibernate from creating or changing tables. There
-are no entities to validate yet. Flyway migrations will accompany the first domain
-model. `open-in-view=false` keeps persistence access within application boundaries
+`ddl-auto=validate` prevents Hibernate from creating or changing tables.
+Flyway applies `src/main/resources/db/migration/V1__create_projects.sql` before
+Hibernate validates the Project mapping. Applied migrations are recorded with
+checksums in `flyway_schema_history`: do not edit an applied migration; add a new
+version for later schema changes. `open-in-view=false` keeps persistence access within application boundaries
 instead of extending the Hibernate session through HTTP response rendering.
+
+## Project persistence (Milestone 2, first step)
+
+The `project` package groups the entity and repository by domain. `Project` maps
+to `projects`, with a generated numeric ID, a required name (150 characters), an
+optional description (2000 characters), and an immutable creation timestamp.
+Names are not unique. `@PrePersist` supplies the timestamp before the initial JPA
+insert; direct SQL writers must supply it themselves. PostgreSQL enforces non-null
+fields, column lengths, and rejects empty or space-only names. Request validation
+will provide clearer errors when we add DTOs and the controller.
+
+`ProjectRepository extends JpaRepository<Project, Long>` gives Spring Data the
+entity and ID types. Spring creates the repository bean and CRUD implementation.
+The next step adds the service boundary, DTOs, and HTTP endpoints.
+
+After running `./mvnw verify`, inspect the schema:
+
+```sh
+docker compose exec postgres psql -U taskflow -d taskflow
+```
+
+Inside psql:
+
+```sql
+\d projects
+SELECT version, description, success FROM flyway_schema_history;
+SELECT count(*) FROM projects;
+\q
+```
+
+Expect migration version `1` with `success = true`. On a fresh database, the
+project count remains zero after tests because test transactions roll back.
 
 ## Troubleshooting
 
@@ -71,6 +109,10 @@ instead of extending the Hibernate session through HTTP response rendering.
   and use that port in curl.
 - Maven download failure: check network access and Java installation; do not
   remove dependencies or skip tests to hide a failure.
+- Flyway checksum mismatch: an applied migration was changed. Restore the
+  original migration and add a new version for the intended change.
+- Hibernate schema validation failure: compare the entity mapping and applied
+  SQL migration; do not switch to `ddl-auto=update` to hide the mismatch.
 
 Stop the database while keeping its data:
 
