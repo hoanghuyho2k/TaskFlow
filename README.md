@@ -4,6 +4,7 @@ A Java 21 / Spring Boot backend learning project for project and task management
 The current milestone supports creating, listing, retrieving, updating, and deleting projects through a
 layered REST API backed by PostgreSQL and Flyway migrations.
 Additional domain APIs and event processing will be introduced incrementally.
+Task persistence is now available; Task HTTP endpoints are the next step.
 
 ## Local development
 
@@ -180,6 +181,47 @@ across requests when other clients insert or delete projects.
 
 Milestone 2's basic Project CRUD is complete. Next is the Task domain and its
 relationship to Project. Ownership and access control will follow with authentication.
+
+## Task persistence (Milestone 3, first step)
+
+`Task` belongs to one Project through a required `project_id` foreign key.
+The Java mapping uses a unidirectional `@ManyToOne(fetch = LAZY)` relationship:
+the Task references its Project, and Project does not hold a task collection.
+Lazy loading defers loading project details until needed; access those details
+inside a service transaction when mapping future response DTOs.
+
+Tasks have a required title (200 characters), optional description (5000
+characters), creation timestamp, status (`TODO`, `IN_PROGRESS`, `DONE`), and
+priority (`LOW`, `MEDIUM`, `HIGH`). New tasks default to `TODO` and `MEDIUM`.
+Enums use `EnumType.STRING`; SQL CHECK constraints enforce the allowed names.
+Reordering enum constants is safe, but renaming an enum value requires a migration
+and a plan for existing rows. Project membership is fixed for a task in this model.
+Assignment is deferred until the User domain exists.
+
+Flyway V2 creates the table and an index on `(project_id, id)` for ordered task
+queries within a project. PostgreSQL does not automatically index the referencing
+side of a foreign key. The repository exposes a paginated `findByProjectId` query.
+
+Deleting a Project permanently deletes its Tasks using database `ON DELETE CASCADE`.
+Deleting a Task does not delete its Project. There is no JPA cascade configured
+on the Task-to-Project relationship. Database cascades do not update cached JPA
+entities; the delete flow must not keep using previously loaded tasks afterward.
+
+After running `./mvnw verify`, inspect the new schema:
+
+```sh
+docker compose exec postgres psql -U taskflow -d taskflow
+```
+
+```sql
+\d tasks
+SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank;
+\q
+```
+
+Expect successful migrations V1 and V2. Task repository tests verify persistence,
+defaults, project-scoped pagination, foreign-key and enum constraints, blank-title
+rejection, and project deletion cascades. Test writes roll back.
 
 ## Troubleshooting
 
