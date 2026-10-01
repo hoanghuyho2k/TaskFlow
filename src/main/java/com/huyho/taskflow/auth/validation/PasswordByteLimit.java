@@ -1,0 +1,17 @@
+package com.huyho.taskflow.auth.validation;
+
+import java.lang.annotation.Retention;
+import java.lang.annotation.Target;
+import jakarta.validation.Constraint;
+import jakarta.validation.Payload;
+import static java.lang.annotation.ElementType.*;
+import static java.lang.annotation.RetentionPolicy.RUNTIME;
+
+@Target({FIELD, PARAMETER, RECORD_COMPONENT, ANNOTATION_TYPE})
+@Retention(RUNTIME)
+@Constraint(validatedBy = PasswordByteLimitValidator.class)
+public @interface PasswordByteLimit {
+    String message() default "Password must be at most 72 UTF-8 bytes";
+    Class<?>[] groups() default {};
+    Class<? extends Payload>[] payload() default {};
+}

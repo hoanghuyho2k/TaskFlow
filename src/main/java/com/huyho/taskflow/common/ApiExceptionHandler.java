@@ -22,6 +22,11 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 @RestControllerAdvice
 public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
+    @ExceptionHandler(com.huyho.taskflow.auth.EmailAlreadyRegisteredException.class)
+    public ProblemDetail handleEmailConflict(com.huyho.taskflow.auth.EmailAlreadyRegisteredException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, exception.getMessage());
+    }
+
     @Override
     protected ResponseEntity<Object> handleTypeMismatch(TypeMismatchException exception,
             HttpHeaders headers, HttpStatusCode status, WebRequest request) {
