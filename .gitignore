@@ -32,3 +32,13 @@ build/
 ### VS Code ###
 .vscode/
 .DS_Store
+
+# Local secrets, logs, and private configuration
+.env
+.env.*
+!.env.example
+*.log
+logs/
+.aws/
+*.pem
+*.key

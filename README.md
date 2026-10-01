@@ -1,324 +1,183 @@
 # TaskFlow
 
-A Java 21 / Spring Boot backend learning project for project and task management.
-The current milestone supports creating, listing, retrieving, updating, and deleting projects through a
-layered REST API backed by PostgreSQL and Flyway migrations.
-Additional domain APIs and event processing will be introduced incrementally.
-Task CRUD, project-scoped listing, priority updates, and status changes are also available.
+TaskFlow is a Java and Spring Boot project-management backend built as an
+incremental backend engineering portfolio and learning project. It demonstrates
+layered REST APIs, relational persistence, transactions, validation, authentication,
+and automated testing. The aim is to understand and explain each design decision.
 
-## Local development
+This is a work in progress, not a production deployment. Authentication is implemented;
+Project ownership and membership authorization are not yet implemented. Every
+authenticated User can currently access every Project and Task.
 
-Prerequisites: Java 21 and Docker Desktop with Docker Compose. The Maven wrapper
-downloads the pinned Maven version, so a separate Maven installation is unnecessary.
+## Implemented functionality
 
-Start Docker Desktop, then run from the repository root:
+- Project CRUD with bounded pagination.
+- Task CRUD within Projects, status changes, priority updates, and status/priority filters.
+- User registration with normalized unique emails and salted bcrypt password hashes.
+- Login with signed, 15-minute JWT bearer tokens; protected Project and Task endpoints.
+- DTO validation and Problem Details responses for expected request errors.
+- Flyway migrations, PostgreSQL constraints, and transactional persistence.
+- OpenAPI documentation, Swagger UI, and Actuator health.
+
+## Technology and architecture
+
+Java 21, Spring Boot 4.1.1, Maven Wrapper, Spring MVC, Spring Data JPA/Hibernate,
+PostgreSQL 17, Flyway, Spring Security, Springdoc OpenAPI, Docker Compose,
+JUnit, AssertJ, Mockito, and MockMvc.
+
+```mermaid
+flowchart LR
+    Client --> Security[Spring Security: bearer authentication]
+    Security --> Controller[REST controller and validated DTO]
+    Controller --> Service[Transactional service]
+    Service --> Repository[Spring Data JPA repository]
+    Repository --> PostgreSQL[(PostgreSQL)]
+    Flyway[Versioned Flyway migrations] --> PostgreSQL
+```
+
+Controllers handle HTTP; services own transaction boundaries and DTO mapping;
+repositories handle persistence. Hibernate validates the migrated schema with
+`ddl-auto=validate`. Task-to-Project relationships are lazy. Deleting a Project
+cascades to its Tasks; deleting a Task preserves its Project.
+
+JWTs contain User ID, issuer, audience, and timestamps. Spring validates signatures
+and claims. JWTs are signed, not encrypted. Passwords and hashes are never token
+claims. Login and registration are public; Project and Task APIs require a token.
+
+## Run locally
+
+Prerequisites: Java 21, Docker with Compose, and OpenSSL for local signing-key
+creation. Maven is downloaded by the wrapper; no separate Maven install is needed.
 
 ```sh
+git clone https://github.com/hoanghuyho2k/TaskFlow.git
+cd TaskFlow
 docker compose up -d --wait postgres
+export JWT_SECRET="$(openssl rand -base64 32)"
 ./mvnw spring-boot:run
 ```
 
-In a second terminal:
+Keep `JWT_SECRET` private. It must encode at least 32 random bytes. Keep it stable
+across restarts if existing tokens should remain valid; changing it invalidates them.
+There is no runtime signing-key default. Never use the committed test-only key for
+a running deployment. Do not activate the `test` profile outside automated tests.
+
+Compose runs PostgreSQL; Java runs on the host. PostgreSQL binds only to
+`127.0.0.1:5432` and uses a named volume. `taskflow` / `taskflow_local` are public,
+non-sensitive local development credentials, not production secrets. Export
+`DB_URL`, `DB_USERNAME`, and `DB_PASSWORD` to override the application connection.
+Spring does not automatically load `.env` files. Compose initialization credentials
+apply only to an empty volume; changing them does not change existing passwords.
+
+In another terminal:
 
 ```sh
 curl -i http://localhost:8080/actuator/health
 ```
 
-Expect HTTP 200 with `"status":"UP"` (the response may also list health groups).
-The aggregate health includes the
-datasource check. `/` returns 404; project endpoints live under `/api/projects`.
+Expect 200 with `status: UP`. Stop Java with Ctrl+C. Stop PostgreSQL with
+`docker compose down`; adding `-v` intentionally deletes its data.
 
-Stop the application with Ctrl+C before building:
+## Explore the API
+
+- Swagger UI: http://localhost:8080/swagger-ui/index.html
+- OpenAPI JSON: http://localhost:8080/v3/api-docs
+
+Register a local example account (choose a different email if it already exists):
 
 ```sh
+curl -i -X POST http://localhost:8080/api/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"learner@example.com","displayName":"Learner","password":"Example-password-123!"}'
+curl -s -X POST http://localhost:8080/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"learner@example.com","password":"Example-password-123!"}'
+```
+
+Copy only the `accessToken` value into Swagger UI's **Authorize** dialog, without
+quotes or JSON field names. Swagger adds `Bearer`. For curl, use
+`-H 'Authorization: Bearer YOUR_ACCESS_TOKEN'` on Project and Task requests.
+These example account credentials are documentation examples, not deployed credentials.
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| POST | `/api/auth/register` | Register; 201, invalid fields 400, duplicate email 409 |
+| POST | `/api/auth/login` | Obtain token; invalid credentials 401 |
+| GET / POST | `/api/projects` | Paginated listing / creation |
+| GET / PUT / DELETE | `/api/projects/{id}` | Retrieve / replace details / delete Project and Tasks |
+| GET / POST | `/api/projects/{projectId}/tasks` | Filtered paginated listing / creation |
+| GET / PUT / DELETE | `/api/tasks/{id}` | Retrieve / replace details and priority / delete |
+| PATCH | `/api/tasks/{id}/status` | Change status |
+
+Use actual IDs returned by the API. Project IDs and Task IDs are separate.
+POST creates a new resource on each successful request. Creation returns 201,
+deletion 204, and other successful domain operations 200. Missing resources return
+404; invalid requests 400; missing/invalid bearer authentication 401.
+
+Pages start at zero; size defaults to 20 and is limited to 100. Task listing accepts
+`status` and `priority`, combined with AND before pagination. Statuses are `TODO`,
+`IN_PROGRESS`, `DONE`; priorities are `LOW`, `MEDIUM`, `HIGH`. New Tasks default to
+TODO/MEDIUM. All status transitions, including reopening, are allowed.
+PUT clears an omitted description; Task PUT requires title and priority and preserves
+status. Swagger requests mutate the real local database.
+
+Further explanations: [registration](docs/registration.md) and
+[JWT authentication](docs/authentication.md).
+
+## Tests
+
+With PostgreSQL running:
+
+```sh
+./mvnw clean test
 ./mvnw verify
 ```
 
-The generated `@SpringBootTest` loads the application context and connects to
-the Compose database. Keep PostgreSQL running for this test. It is a foundation
-smoke test. Project repository tests also exercise real PostgreSQL writes and
-reads, rolling back their transactions. Identity sequences may still advance.
-MockMvc API tests exercise validation and the controller, service, and repository
-together, also rolling back test transactions. They do not independently prove
-commit behavior because they wrap each request in a test transaction.
-These tests currently use the local database; isolated Testcontainers tests will
-follow in the testing milestone.
+The suite currently has 95 tests covering persistence, constraints, CRUD, validation,
+filtering, password handling, login, invalid/tampered/expired tokens, and OpenAPI.
+Integration-style tests use the local Compose database and roll back test writes;
+ID sequences can still advance. The test profile supplies a clearly labelled
+test-only signing key. MockMvc domain tests use authenticated test callers; dedicated
+login tests exercise real JWT validation through the security filter chain.
+Testcontainers isolation and CI are future work. Do not run these tests against a
+production database.
 
-## How the foundation works
+## Project structure
 
-`@SpringBootApplication` enables configuration, automatic configuration and
-component scanning under `com.huyho.taskflow`. Dependencies tell Spring Boot
-which infrastructure to configure: Spring MVC for HTTP, JPA/Hibernate for
-persistence, the PostgreSQL JDBC driver for database access, and Actuator for health.
-The Boot parent manages compatible dependency and plugin versions; the project's
-`0.0.1-SNAPSHOT` is its own development version, independent of the stable Boot parent.
-
-Compose runs only PostgreSQL. The Java process runs on the host and connects to
-`localhost:5432`. The port binds to loopback and the named volume preserves data
-across container recreation. The included credentials are local development
-defaults. Override `DB_URL`, `DB_USERNAME` and `DB_PASSWORD` for other environments;
-do not use the local credentials for deployment. Spring does not automatically
-load a `.env` file; export overrides in the shell that launches Java.
-
-`ddl-auto=validate` prevents Hibernate from creating or changing tables.
-Flyway applies `src/main/resources/db/migration/V1__create_projects.sql` before
-Hibernate validates the Project mapping. Applied migrations are recorded with
-checksums in `flyway_schema_history`: do not edit an applied migration; add a new
-version for later schema changes. `open-in-view=false` keeps persistence access within application boundaries
-instead of extending the Hibernate session through HTTP response rendering.
-
-## Project persistence (Milestone 2, first step)
-
-The `project` package groups the entity and repository by domain. `Project` maps
-to `projects`, with a generated numeric ID, a required name (150 characters), an
-optional description (2000 characters), and an immutable creation timestamp.
-Names are not unique. `@PrePersist` supplies the timestamp before the initial JPA
-insert; direct SQL writers must supply it themselves. PostgreSQL enforces non-null
-fields, column lengths, and rejects empty or space-only names. Request DTO
-validation rejects blank names and oversized fields before persistence.
-
-`ProjectRepository extends JpaRepository<Project, Long>` gives Spring Data the
-entity and ID types. Spring creates the repository bean and CRUD implementation.
-The service adds transaction boundaries, and the controller exposes HTTP endpoints.
-
-After running `./mvnw verify`, inspect the schema:
-
-```sh
-docker compose exec postgres psql -U taskflow -d taskflow
+```text
+src/main/java/com/huyho/taskflow/
+  auth/       Registration, login, DTOs, and password validation
+  common/     Central API exception handling
+  config/     Security, JWT, password encoding, and OpenAPI
+  project/    Project entity, repository, service, controller, and DTOs
+  task/       Task entity, enums, repository, services, controllers, and DTOs
+  user/       User entity and repository
+src/main/resources/
+  application.properties
+  db/migration/  Versioned SQL migrations
+src/test/        API, security, and persistence tests
+compose.yaml     Local PostgreSQL
+docs/           Authentication guides
 ```
 
-Inside psql:
+## Current limitations and roadmap
 
-```sql
-\d projects
-SELECT version, description, success FROM flyway_schema_history;
-SELECT count(*) FROM projects;
-\q
-```
+- Next: Project ownership, membership authorization, and Task assignment.
+- Then: isolated PostgreSQL tests with Testcontainers and CI checks.
+- Later: caching with Redis, domain events with Kafka, retries/idempotency,
+  notifications/activity, containerized application deployment, and AWS.
+- No refresh tokens, immediate token revocation, or per-request deleted-User check yet.
+- Login rate limiting, production TLS/secrets handling, and observability need deployment work.
+- Concurrent updates use last-write-wins; optimistic locking is not implemented.
 
-Expect migration version `1` with `success = true`. On a fresh database, the
-project count remains zero after tests because test transactions roll back.
-
-## Create and retrieve projects
-
-Restart the application after building changes. Create a project:
-
-```sh
-curl -i -X POST http://localhost:8080/api/projects \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"TaskFlow","description":"Backend portfolio"}'
-```
-
-Expect `201 Created`, a `Location: /api/projects/<id>` header, and JSON with
-`id`, `name`, `description`, and `createdAt`. Description is optional; name is
-required and limited to 150 characters, description to 2000. Validation applies
-to the submitted name before surrounding whitespace is stripped for storage.
-Names need not be unique. Replace `1` below with the ID returned from creation:
-
-```sh
-curl -i http://localhost:8080/api/projects/1
-curl -i http://localhost:8080/api/projects/9223372036854775807
-curl -i -X POST http://localhost:8080/api/projects \
-  -H 'Content-Type: application/json' -d '{"name":"   "}'
-```
-
-Expect `200` for an existing project, `404` for a missing project, and `400` for
-the blank name. Error responses use `application/problem+json`; request field
-validation includes an `errors` array with field names and messages. Malformed
-JSON and invalid IDs also return `400`. Manual POST requests persist real rows.
-
-Request flow: Spring MVC deserializes JSON into `CreateProjectRequest` and runs
-Bean Validation through `@Valid`. The controller calls `ProjectService`, which
-constructs the entity and calls the repository inside `@Transactional`. Spring's
-transaction proxy commits before the service returns to the controller; runtime
-exceptions roll back. The service maps the entity to `ProjectResponse` inside
-the transaction, and the controller sends HTTP status, headers, and JSON.
-Retrieval uses `@Transactional(readOnly = true)` as a persistence optimization
-hint, not an authorization rule or a guarantee that writes are impossible.
-
-`@Service` and `@RestController` register Spring beans. Constructor injection
-connects the controller to the service and the service to the generated repository
-bean. The records define immutable API data; JPA entities represent persisted
-state. `ApiExceptionHandler` translates a missing project to `404` and delegates
-standard MVC failures to Spring's `ResponseEntityExceptionHandler`.
-
-## List, update, and delete projects
-
-```sh
-curl -i 'http://localhost:8080/api/projects?page=0&size=20'
-```
-
-Listing returns `content`, `page`, `size`, `totalElements`, and `totalPages`.
-Pages start at zero, size defaults to 20 and must be between 1 and 100, and results
-are sorted by ascending ID. An empty or out-of-range page returns `200` with an
-empty `content` array. Invalid pagination parameters return `400`.
-
-Use the ID of a project you created in the following commands (replace `1`):
-
-```sh
-curl -i -X PUT http://localhost:8080/api/projects/1 \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"TaskFlow updated","description":"Updated description"}'
-curl -i http://localhost:8080/api/projects/1
-curl -i -X DELETE http://localhost:8080/api/projects/1
-curl -i http://localhost:8080/api/projects/1
-```
-
-PUT returns `200` and replaces the editable fields. Name is required; omitted or
-null description clears the previous description. The same length and blank-name
-rules apply as creation. ID and `createdAt` stay unchanged. Missing projects return
-`404`; PUT does not create a project at a supplied ID. DELETE permanently removes
-the project, returns `204` with no body, and subsequent GET or DELETE returns `404`.
-
-Update loads a managed entity inside a service transaction and calls
-`updateDetails`. Hibernate's dirty checking detects changed fields and writes an
-UPDATE when the transaction flushes; an extra repository `save` call is unnecessary.
-Repository tests flush and clear the persistence context before re-reading to
-verify database state. These tests roll back, so manual projects remain intact.
-Concurrent updates currently use last-write-wins; optimistic locking is a future
-design decision. Offset pagination gives stable ordering but not a snapshot
-across requests when other clients insert or delete projects.
-
-Milestone 2's basic Project CRUD is complete. Next is the Task domain and its
-relationship to Project. Ownership and access control will follow with authentication.
-
-## Task persistence (Milestone 3, first step)
-
-`Task` belongs to one Project through a required `project_id` foreign key.
-The Java mapping uses a unidirectional `@ManyToOne(fetch = LAZY)` relationship:
-the Task references its Project, and Project does not hold a task collection.
-Lazy loading defers loading project details until needed; access those details
-inside a service transaction when mapping future response DTOs.
-
-Tasks have a required title (200 characters), optional description (5000
-characters), creation timestamp, status (`TODO`, `IN_PROGRESS`, `DONE`), and
-priority (`LOW`, `MEDIUM`, `HIGH`). New tasks default to `TODO` and `MEDIUM`.
-Enums use `EnumType.STRING`; SQL CHECK constraints enforce the allowed names.
-Reordering enum constants is safe, but renaming an enum value requires a migration
-and a plan for existing rows. Project membership is fixed for a task in this model.
-Assignment is deferred until the User domain exists.
-
-Flyway V2 creates the table and an index on `(project_id, id)` for ordered task
-queries within a project. PostgreSQL does not automatically index the referencing
-side of a foreign key. The repository exposes a paginated `findByProjectId` query.
-
-Deleting a Project permanently deletes its Tasks using database `ON DELETE CASCADE`.
-Deleting a Task does not delete its Project. There is no JPA cascade configured
-on the Task-to-Project relationship. Database cascades do not update cached JPA
-entities; the delete flow must not keep using previously loaded tasks afterward.
-
-After running `./mvnw verify`, inspect the new schema:
-
-```sh
-docker compose exec postgres psql -U taskflow -d taskflow
-```
-
-```sql
-\d tasks
-SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank;
-\q
-```
-
-Expect successful migrations V1 and V2. Task repository tests verify persistence,
-defaults, project-scoped pagination, foreign-key and enum constraints, blank-title
-rejection, and project deletion cascades. Test writes roll back.
-
-## Create, list, and retrieve tasks
-
-Restart your application to load changes. Use an existing Project ID in place of
-`1` below:
-
-```sh
-curl -i -X POST http://localhost:8080/api/projects/1/tasks \
-  -H 'Content-Type: application/json' \
-  -d '{"title":"Build Task API","description":"Create and retrieve tasks"}'
-curl -i 'http://localhost:8080/api/projects/1/tasks?page=0&size=20'
-```
-
-Creation returns `201` with `Location: /api/tasks/<id>`. Retrieve the returned ID:
-
-```sh
-curl -i http://localhost:8080/api/tasks/1
-```
-
-The Task response contains `id`, `projectId`, `title`, `description`, `status`,
-`priority`, and `createdAt`. Title is required, nonblank, and limited to 200
-characters before trimming surrounding whitespace; description is optional and
-limited to 5000. New tasks start as `TODO` with `MEDIUM` priority. The request DTO
-accepts title and description; project selection comes from the URL.
-
-Listing is restricted to the requested Project, ordered by ascending Task ID, and
-uses the same page response fields and size limits as Project listing. A Project
-with no Tasks returns an empty page; a missing Project returns `404` for either
-create or list. Missing Tasks return `404`. Invalid IDs, pagination, request fields,
-or malformed JSON return `400`. Request and method validation include field or
-parameter names in an `errors` array.
-
-`TaskService` loads the Project before constructing the Task. It maps entities to
-DTOs inside its transaction. The response contains only the Project ID, so it does
-not serialize a lazy Project entity or expose JPA relationships. Project selection
-is not yet access control; authentication and membership authorization come later.
-Tests cover defaults, request validation, missing resources, pagination, and
-separation between Projects.
-
-## Update, change status, and delete tasks
-
-Use an existing Task ID in place of `1`:
-
-```sh
-curl -i -X PUT http://localhost:8080/api/tasks/1 \
-  -H 'Content-Type: application/json' \
-  -d '{"title":"Finish Task API","description":"Verify changes","priority":"HIGH"}'
-curl -i -X PATCH http://localhost:8080/api/tasks/1/status \
-  -H 'Content-Type: application/json' -d '{"status":"IN_PROGRESS"}'
-curl -i http://localhost:8080/api/tasks/1
-curl -i -X DELETE http://localhost:8080/api/tasks/1
-```
-
-PUT replaces title, description, and priority and returns `200` with the updated
-Task. Title and priority are required; omitted or null description clears it.
-Priority names are `LOW`, `MEDIUM`, and `HIGH`. PUT preserves status, Project,
-and creation timestamp. The same title and description limits apply as creation.
-
-PATCH changes only status and returns `200`. Status is required and must be
-`TODO`, `IN_PROGRESS`, or `DONE`. All transitions are currently allowed, including
-reopening a completed Task; repeating the same status leaves the same persisted
-state. There are no events or notification side effects yet. Enum names are case
-sensitive. Unknown values, null required fields, malformed JSON, invalid IDs,
-and validation failures return `400`. Missing Tasks return `404` for valid requests.
-
-DELETE permanently removes only the Task and returns `204` without a body.
-Its Project and sibling Tasks remain. Subsequent GET or DELETE returns `404`.
-The service loads entities inside write transactions; dirty checking persists
-detail and status changes at commit. Concurrent writes currently use last-write-wins.
-
-The synchronous Task API is complete for these operations. Assignment remains
-deferred until Users and membership authorization exist. Next is API quality:
-review error contracts, add useful filtering, and document the API.
+Redis, Kafka, GitHub Actions, and AWS are roadmap items, not implemented features.
 
 ## Troubleshooting
 
-- Docker connection errors: start Docker Desktop and check `docker info`.
-- Port 5432 already allocated: check for another local PostgreSQL or container
-  before starting Compose. If you change the host port, change `DB_URL` too.
-- Database connection refused: run `docker compose ps` and
-  `docker compose logs postgres`; wait for PostgreSQL to be healthy.
-- Authentication failed: verify credentials. PostgreSQL initialization variables
-  apply only when the data volume is empty; changing them does not change an
-  existing database user's password.
-- Port 8080 already in use: stop the other application or export `SERVER_PORT=8081`
-  and use that port in curl.
-- Maven download failure: check network access and Java installation; do not
-  remove dependencies or skip tests to hide a failure.
-- Flyway checksum mismatch: an applied migration was changed. Restore the
-  original migration and add a new version for the intended change.
-- Hibernate schema validation failure: compare the entity mapping and applied
-  SQL migration; do not switch to `ddl-auto=update` to hide the mismatch.
-
-Stop the database while keeping its data:
-
-```sh
-docker compose down
-```
-
-Adding `-v` deletes the database volume and its data; reserve that for an intentional reset.
+- Port 8080 occupied: stop the old server before restarting, or use `SERVER_PORT=8081`.
+- Missing/invalid `JWT_SECRET`: export a Base64-encoded random key before startup.
+- 401 in Swagger: paste only a fresh token and reauthorize after changing the signing key.
+- 404: verify the resource exists and use a Task ID for Task routes, not a Project ID.
+- Database connection failure: check `docker compose ps` and `docker compose logs postgres`.
+- Migration checksum mismatch: restore the applied migration and add a new version.
+- Schema mismatch: compare mappings and migration SQL; do not hide it with `ddl-auto=update`.
