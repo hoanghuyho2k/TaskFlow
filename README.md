@@ -4,7 +4,7 @@ A Java 21 / Spring Boot backend learning project for project and task management
 The current milestone supports creating, listing, retrieving, updating, and deleting projects through a
 layered REST API backed by PostgreSQL and Flyway migrations.
 Additional domain APIs and event processing will be introduced incrementally.
-Task creation, project-scoped listing, and retrieval are also available.
+Task CRUD, project-scoped listing, priority updates, and status changes are also available.
 
 ## Local development
 
@@ -259,7 +259,42 @@ DTOs inside its transaction. The response contains only the Project ID, so it do
 not serialize a lazy Project entity or expose JPA relationships. Project selection
 is not yet access control; authentication and membership authorization come later.
 Tests cover defaults, request validation, missing resources, pagination, and
-separation between Projects. Next: Task updates, deletion, and status changes.
+separation between Projects.
+
+## Update, change status, and delete tasks
+
+Use an existing Task ID in place of `1`:
+
+```sh
+curl -i -X PUT http://localhost:8080/api/tasks/1 \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Finish Task API","description":"Verify changes","priority":"HIGH"}'
+curl -i -X PATCH http://localhost:8080/api/tasks/1/status \
+  -H 'Content-Type: application/json' -d '{"status":"IN_PROGRESS"}'
+curl -i http://localhost:8080/api/tasks/1
+curl -i -X DELETE http://localhost:8080/api/tasks/1
+```
+
+PUT replaces title, description, and priority and returns `200` with the updated
+Task. Title and priority are required; omitted or null description clears it.
+Priority names are `LOW`, `MEDIUM`, and `HIGH`. PUT preserves status, Project,
+and creation timestamp. The same title and description limits apply as creation.
+
+PATCH changes only status and returns `200`. Status is required and must be
+`TODO`, `IN_PROGRESS`, or `DONE`. All transitions are currently allowed, including
+reopening a completed Task; repeating the same status leaves the same persisted
+state. There are no events or notification side effects yet. Enum names are case
+sensitive. Unknown values, null required fields, malformed JSON, invalid IDs,
+and validation failures return `400`. Missing Tasks return `404` for valid requests.
+
+DELETE permanently removes only the Task and returns `204` without a body.
+Its Project and sibling Tasks remain. Subsequent GET or DELETE returns `404`.
+The service loads entities inside write transactions; dirty checking persists
+detail and status changes at commit. Concurrent writes currently use last-write-wins.
+
+The synchronous Task API is complete for these operations. Assignment remains
+deferred until Users and membership authorization exist. Next is API quality:
+review error contracts, add useful filtering, and document the API.
 
 ## Troubleshooting
 

@@ -31,8 +31,30 @@ public class TaskService {
 
     @Transactional(readOnly = true)
     public TaskResponse getById(Long id) {
-        return TaskResponse.from(tasks.findById(id)
-                .orElseThrow(() -> new TaskNotFoundException(id)));
+        return TaskResponse.from(findTask(id));
+    }
+
+    @Transactional
+    public TaskResponse update(Long id, UpdateTaskRequest request) {
+        Task task = findTask(id);
+        task.updateDetails(request.title().strip(), request.description(), request.priority());
+        return TaskResponse.from(task);
+    }
+
+    @Transactional
+    public TaskResponse changeStatus(Long id, ChangeTaskStatusRequest request) {
+        Task task = findTask(id);
+        task.changeStatus(request.status());
+        return TaskResponse.from(task);
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        tasks.delete(findTask(id));
+    }
+
+    private Task findTask(Long id) {
+        return tasks.findById(id).orElseThrow(() -> new TaskNotFoundException(id));
     }
 
     @Transactional(readOnly = true)

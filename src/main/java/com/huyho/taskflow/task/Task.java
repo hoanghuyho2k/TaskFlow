@@ -65,6 +65,16 @@ public class Task {
         return id;
     }
 
+    public void updateDetails(String title, String description, TaskPriority priority) {
+        this.title = title;
+        this.description = description;
+        this.priority = Objects.requireNonNull(priority, "Priority is required");
+    }
+
+    public void changeStatus(TaskStatus status) {
+        this.status = Objects.requireNonNull(status, "Status is required");
+    }
+
     public Project getProject() {
         return project;
     }
