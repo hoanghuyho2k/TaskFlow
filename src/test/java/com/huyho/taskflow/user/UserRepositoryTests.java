@@ -15,6 +15,7 @@ import tools.jackson.databind.ObjectMapper;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+@org.springframework.test.context.ActiveProfiles("test")
 @SpringBootTest
 @Transactional
 class UserRepositoryTests {
@@ -29,10 +30,11 @@ class UserRepositoryTests {
         String raw = "Example-password-123!";
         String hash = passwords.encode(raw);
         Instant beforeSave = Instant.now().truncatedTo(ChronoUnit.SECONDS);
-        Long id = users.saveAndFlush(new User("  Learner@Example.com  ", " Learner ", hash)).getId();
+        String email = "repository-" + java.util.UUID.randomUUID() + "@example.com";
+        Long id = users.saveAndFlush(new User("  " + email.toUpperCase(java.util.Locale.ROOT) + "  ", " Learner ", hash)).getId();
         entityManager.clear();
 
-        User loaded = users.findByEmail("learner@example.com").orElseThrow();
+        User loaded = users.findByEmail(email).orElseThrow();
         assertThat(loaded.getId()).isEqualTo(id);
         assertThat(loaded.getDisplayName()).isEqualTo("Learner");
         assertThat(loaded.getCreatedAt()).isBetween(beforeSave, Instant.now());

@@ -22,6 +22,12 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 @RestControllerAdvice
 public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
+    @ExceptionHandler(com.huyho.taskflow.auth.InvalidCredentialsException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidCredentials(com.huyho.taskflow.auth.InvalidCredentialsException exception) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).header("WWW-Authenticate", "Bearer")
+                .body(ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, exception.getMessage()));
+    }
+
     @ExceptionHandler(com.huyho.taskflow.auth.EmailAlreadyRegisteredException.class)
     public ProblemDetail handleEmailConflict(com.huyho.taskflow.auth.EmailAlreadyRegisteredException exception) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, exception.getMessage());

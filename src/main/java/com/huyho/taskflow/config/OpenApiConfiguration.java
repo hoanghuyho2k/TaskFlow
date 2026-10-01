@@ -10,8 +10,12 @@ public class OpenApiConfiguration {
 
     @Bean
     public OpenAPI taskFlowOpenApi() {
-        return new OpenAPI().info(new Info().title("TaskFlow API").version("0.0.1")
+        return new OpenAPI().components(new io.swagger.v3.oas.models.Components().addSecuritySchemes("bearerAuth",
+                new io.swagger.v3.oas.models.security.SecurityScheme().type(io.swagger.v3.oas.models.security.SecurityScheme.Type.HTTP)
+                        .scheme("bearer").bearerFormat("JWT")))
+                .info(new Info().title("TaskFlow API").version("0.0.1")
                 .description("Project and Task management. Use IDs returned by creation or listing. "
-                        + "Write operations persist real data. Authentication is a later milestone."));
+                        + "Write operations persist real data. Log in and authorize with the returned bearer token. "
+                        + "Project membership authorization is the next step."));
     }
 }

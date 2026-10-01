@@ -13,9 +13,17 @@ import org.springframework.web.bind.annotation.*;
 @Tag(name = "Authentication")
 public class AuthController {
     private final RegistrationService registration;
+    private final LoginService login;
 
-    public AuthController(RegistrationService registration) {
+    public AuthController(RegistrationService registration, LoginService login) {
         this.registration = registration;
+        this.login = login;
+    }
+
+    @PostMapping("/login")
+    @Operation(summary = "Log in and receive a 15-minute bearer token")
+    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+        return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore()).body(login.login(request));
     }
 
     @PostMapping("/register")
