@@ -5,6 +5,7 @@ The current milestone supports creating, listing, retrieving, updating, and dele
 layered REST API backed by PostgreSQL and Flyway migrations.
 Additional domain APIs and event processing will be introduced incrementally.
 Task CRUD, project-scoped listing, priority updates, and status changes are also available.
+User persistence and password hashing are in place; registration and login are next.
 
 ## Local development
 
@@ -367,6 +368,47 @@ The Maven build checks the generated contract for routes, status codes, DTO
 constraints and enum schemas, and verifies that Swagger UI assets are served.
 Documentation annotations describe behavior; they do not change runtime HTTP
 status codes or enforce validation. Endpoint tests verify the implementation.
+
+## User persistence and password hashing (Milestone 5, first step)
+
+V3 creates `users` with a unique normalized email, display name, password hash,
+and creation timestamp. Java trims and lowercases email using `Locale.ROOT`;
+PostgreSQL also enforces normalized, unique values. This is our application's
+case-insensitive email identity policy. Full email syntax validation belongs to
+the upcoming registration request DTO. The unique constraint handles concurrent
+duplicate registrations even when an application-level check races.
+
+`PasswordConfiguration` exposes Spring's delegating `PasswordEncoder` bean,
+currently encoding with bcrypt and storing the algorithm prefix `{bcrypt}`.
+Hashing is a one-way transformation, not encryption: login will use `matches`
+to verify the supplied password. Random salts make repeated encodings of the
+same password different. The work factor intentionally makes verification costly;
+deployment tuning should be measured on the target hardware.
+
+The User constructor accepts an already encoded hash. The future registration
+service will own encoding; plaintext passwords must never be persisted or logged.
+The hash getter is excluded from Jackson serialization as a guard; upcoming API
+responses will use DTOs that contain no password fields. Entities have no generated
+`toString` methods that print credentials. SQL constraints ensure nonblank hash
+storage, but cannot prove that an arbitrary supplied string is a secure hash.
+
+This adds only the crypto module. HTTP authentication, registration, login, and
+JWT issuance are not yet implemented. Password validation will enforce bcrypt's
+72-byte UTF-8 input limit before encoding; character count alone is insufficient
+for multibyte passwords. Passwords will not be trimmed or normalized.
+
+After `./mvnw verify`, inspect migration history and the schema:
+
+```sh
+docker compose exec postgres psql -U taskflow -d taskflow -c '\d users'
+docker compose exec postgres psql -U taskflow -d taskflow \
+  -c 'SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank;'
+```
+
+Tests verify normalized persistence, database uniqueness, correct/incorrect
+password matching, random salts, and exclusion of password hashes from JSON.
+Their writes roll back. Next: registration DTOs, service, endpoint, and duplicate
+email error handling.
 
 ## Troubleshooting
 
