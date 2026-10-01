@@ -1,9 +1,9 @@
 # TaskFlow
 
 A Java 21 / Spring Boot backend learning project for project and task management.
-The current milestone adds the Project persistence model and a Flyway migration
-on top of PostgreSQL connectivity and application health.
-Domain APIs and event processing will be introduced incrementally.
+The current milestone supports creating and retrieving projects through a
+layered REST API backed by PostgreSQL and Flyway migrations.
+Additional domain APIs and event processing will be introduced incrementally.
 
 ## Local development
 
@@ -25,7 +25,7 @@ curl -i http://localhost:8080/actuator/health
 
 Expect HTTP 200 with `"status":"UP"` (the response may also list health groups).
 The aggregate health includes the
-datasource check. There are no domain endpoints yet; `/` returns 404.
+datasource check. `/` returns 404; project endpoints live under `/api/projects`.
 
 Stop the application with Ctrl+C before building:
 
@@ -37,6 +37,9 @@ The generated `@SpringBootTest` loads the application context and connects to
 the Compose database. Keep PostgreSQL running for this test. It is a foundation
 smoke test. Project repository tests also exercise real PostgreSQL writes and
 reads, rolling back their transactions. Identity sequences may still advance.
+MockMvc API tests exercise validation and the controller, service, and repository
+together, also rolling back test transactions. They do not independently prove
+commit behavior because they wrap each request in a test transaction.
 These tests currently use the local database; isolated Testcontainers tests will
 follow in the testing milestone.
 
@@ -70,12 +73,12 @@ to `projects`, with a generated numeric ID, a required name (150 characters), an
 optional description (2000 characters), and an immutable creation timestamp.
 Names are not unique. `@PrePersist` supplies the timestamp before the initial JPA
 insert; direct SQL writers must supply it themselves. PostgreSQL enforces non-null
-fields, column lengths, and rejects empty or space-only names. Request validation
-will provide clearer errors when we add DTOs and the controller.
+fields, column lengths, and rejects empty or space-only names. Request DTO
+validation rejects blank names and oversized fields before persistence.
 
 `ProjectRepository extends JpaRepository<Project, Long>` gives Spring Data the
 entity and ID types. Spring creates the repository bean and CRUD implementation.
-The next step adds the service boundary, DTOs, and HTTP endpoints.
+The service adds transaction boundaries, and the controller exposes HTTP endpoints.
 
 After running `./mvnw verify`, inspect the schema:
 
@@ -94,6 +97,51 @@ SELECT count(*) FROM projects;
 
 Expect migration version `1` with `success = true`. On a fresh database, the
 project count remains zero after tests because test transactions roll back.
+
+## Create and retrieve projects
+
+Restart the application after building changes. Create a project:
+
+```sh
+curl -i -X POST http://localhost:8080/api/projects \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"TaskFlow","description":"Backend portfolio"}'
+```
+
+Expect `201 Created`, a `Location: /api/projects/<id>` header, and JSON with
+`id`, `name`, `description`, and `createdAt`. Description is optional; name is
+required and limited to 150 characters, description to 2000. Validation applies
+to the submitted name before surrounding whitespace is stripped for storage.
+Names need not be unique. Replace `1` below with the ID returned from creation:
+
+```sh
+curl -i http://localhost:8080/api/projects/1
+curl -i http://localhost:8080/api/projects/9223372036854775807
+curl -i -X POST http://localhost:8080/api/projects \
+  -H 'Content-Type: application/json' -d '{"name":"   "}'
+```
+
+Expect `200` for an existing project, `404` for a missing project, and `400` for
+the blank name. Error responses use `application/problem+json`; request field
+validation includes an `errors` array with field names and messages. Malformed
+JSON and invalid IDs also return `400`. Manual POST requests persist real rows.
+
+Request flow: Spring MVC deserializes JSON into `CreateProjectRequest` and runs
+Bean Validation through `@Valid`. The controller calls `ProjectService`, which
+constructs the entity and calls the repository inside `@Transactional`. Spring's
+transaction proxy commits before the service returns to the controller; runtime
+exceptions roll back. The service maps the entity to `ProjectResponse` inside
+the transaction, and the controller sends HTTP status, headers, and JSON.
+Retrieval uses `@Transactional(readOnly = true)` as a persistence optimization
+hint, not an authorization rule or a guarantee that writes are impossible.
+
+`@Service` and `@RestController` register Spring beans. Constructor injection
+connects the controller to the service and the service to the generated repository
+bean. The records define immutable API data; JPA entities represent persisted
+state. `ApiExceptionHandler` translates a missing project to `404` and delegates
+standard MVC failures to Spring's `ResponseEntityExceptionHandler`.
+
+Next in Milestone 2: listing, updating, and deleting projects.
 
 ## Troubleshooting
 
