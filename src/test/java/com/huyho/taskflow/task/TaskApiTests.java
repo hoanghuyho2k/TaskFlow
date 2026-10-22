@@ -63,6 +63,16 @@ class TaskApiTests {
     }
 
     @Test
+    void createsTaskWithRequestedStatusAndPriority() throws Exception {
+        Long projectId = projects.saveAndFlush(new Project("Custom task options", null, com.huyho.taskflow.user.User.reference(1L))).getId();
+        mvc.perform(post("/api/projects/{id}/tasks", projectId).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\\"title\\":\\"Ship feature\\",\\"status\\":\\"IN_PROGRESS\\",\\"priority\\":\\"HIGH\\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.priority").value("HIGH"));
+    }
+
+    @Test
     void listsOnlyRequestedProjectsTasksInPages() throws Exception {
         Project first = projects.saveAndFlush(new Project("First project", null, com.huyho.taskflow.user.User.reference(1L)));
         Project second = projects.saveAndFlush(new Project("Second project", null, com.huyho.taskflow.user.User.reference(1L)));
