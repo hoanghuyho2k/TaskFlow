@@ -36,4 +36,5 @@ jobs:
         env:
           JWT_SECRET: dGVzdC1vbmx5LXNpZ25pbmcta2V5LWZvci10YXNrZmxvdy0zMi1ieXRlcw==
         run: ./mvnw -B verify
-
+      - name: Build container image
+        run: docker build --tag taskflow:ci .
