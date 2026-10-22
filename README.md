@@ -11,9 +11,9 @@ are hidden from users after migration.
 ## Run the demo
 
 The application serves the TaskFlow web interface at `/` and Swagger at
-`/swagger-ui/index.html`. To share a public demo, deploy the Docker image to a
-container host and configure a persistent PostgreSQL database plus the required
-environment variables. Do not publish database credentials or `JWT_SECRET`.
+`/swagger-ui/index.html`. A free demo deployment uses Render for the Docker web
+service and Neon for PostgreSQL. Keep database credentials private. The free web
+service sleeps after inactivity, so its first request can take about a minute.
 
 ## Implemented functionality
 
@@ -99,8 +99,30 @@ credentials described above. For a hosted deployment, configure `DB_URL`,
 secret manager; use a managed PostgreSQL service and enable HTTPS at the host.
 The app container listens on port 8080 and runs as a non-root user.
 
-The GitHub Actions workflow is configured to run `./mvnw verify` on pushes to
-`main` and on pull requests.
+The GitHub Actions workflow is configured to run `./mvnw verify` and build the
+Docker image on pushes to `main` and on pull requests.
+
+### Deploy the free demo
+
+1. Create a PostgreSQL project on [Neon](https://neon.com/) and copy its direct
+   connection details. Select a region near Render's Singapore region if
+   available.
+2. In Render, create a Blueprint from this repository and select `render.yaml`.
+   Render creates the free Docker web service and generates a stable `JWT_SECRET`.
+3. In the Render service's Environment settings, set `DB_URL` to the Neon
+   connection URL, changing its scheme from `postgresql://` to
+   `jdbc:postgresql://` and retaining `?sslmode=require`. Set `DB_USERNAME` and
+   `DB_PASSWORD` from the same Neon connection details. Do not commit these
+   values to GitHub.
+4. Save the environment values and redeploy. Flyway applies the schema
+   migrations on startup. Wait for `/actuator/health` to report `UP`, then open
+   the service's `onrender.com` URL and register a demo account.
+
+The Render Blueprint includes the public health check, free plan, and service
+region. The Render free filesystem is temporary, so all persistent application
+data must stay in Neon. Render's free web service may sleep and cold-start; Neon
+also enforces free-plan usage limits. Check the providers' current limits before
+sharing the demo widely.
 
 ## Explore the API
 
@@ -190,7 +212,7 @@ docs/           Authentication guides
 - Next: Project membership and Task assignment.
 - Then: isolated PostgreSQL tests with Testcontainers.
 - Later: caching with Redis, domain events with Kafka, retries/idempotency,
-  notifications/activity, and a cloud deployment.
+  notifications/activity, and production deployment hardening.
 - No refresh tokens, immediate token revocation, or per-request deleted-User check yet.
 - Login rate limiting, production TLS/secrets handling, and observability need deployment work.
 - Concurrent updates use last-write-wins; optimistic locking is not implemented.
