@@ -1,0 +1,24 @@
+package com.huyho.taskflow.project;
+
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.huyho.taskflow.config.AuthenticatedUser;
+
+@RestController
+@RequestMapping("/api/dashboard")
+public class DashboardController {
+
+    private final DashboardService service;
+
+    public DashboardController(DashboardService service) {
+        this.service = service;
+    }
+
+    @GetMapping
+    public DashboardResponse get(Authentication authentication) {
+        return service.getForOwner(AuthenticatedUser.id(authentication));
+    }
+}
