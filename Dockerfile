@@ -12,4 +12,4 @@ RUN useradd --system --uid 10001 --create-home appuser
 COPY --from=build /workspace/target/taskflow-0.0.1-SNAPSHOT.jar /app/taskflow.jar
 USER 10001
 EXPOSE 8080
-ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "/app/taskflow.jar"]
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=60", "-jar", "/app/taskflow.jar"]
