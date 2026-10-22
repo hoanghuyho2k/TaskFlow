@@ -38,7 +38,7 @@ class TaskRepositoryTests {
 
     @Test
     void savesAndReloadsTaskWithProjectAndDefaults() {
-        Project project = projects.saveAndFlush(new Project("Task project", null));
+        Project project = projects.saveAndFlush(new Project("Task project", null, com.huyho.taskflow.user.User.reference(1L)));
         Instant beforeSave = Instant.now().truncatedTo(ChronoUnit.SECONDS);
         Task saved = tasks.saveAndFlush(new Task(project, "Build API", "Add endpoints"));
         Long id = saved.getId();
@@ -59,8 +59,8 @@ class TaskRepositoryTests {
 
     @Test
     void listsOnlyTasksBelongingToRequestedProject() {
-        Project first = projects.saveAndFlush(new Project("First", null));
-        Project second = projects.saveAndFlush(new Project("Second", null));
+        Project first = projects.saveAndFlush(new Project("First", null, com.huyho.taskflow.user.User.reference(1L)));
+        Project second = projects.saveAndFlush(new Project("Second", null, com.huyho.taskflow.user.User.reference(1L)));
         Task firstTask = tasks.saveAndFlush(new Task(first, "First task", null));
         Task secondTask = tasks.saveAndFlush(new Task(first, "Second task", null));
         tasks.saveAndFlush(new Task(second, "Other project task", null));
@@ -75,13 +75,13 @@ class TaskRepositoryTests {
 
     @Test
     void deletingProjectCascadesToItsTasksOnly() {
-        Project removed = projects.saveAndFlush(new Project("Remove", null));
-        Project kept = projects.saveAndFlush(new Project("Keep", null));
+        Project removed = projects.saveAndFlush(new Project("Remove", null, com.huyho.taskflow.user.User.reference(1L)));
+        Project kept = projects.saveAndFlush(new Project("Keep", null, com.huyho.taskflow.user.User.reference(1L)));
         Long removedTaskId = tasks.saveAndFlush(new Task(removed, "Remove task", null)).getId();
         Long keptTaskId = tasks.saveAndFlush(new Task(kept, "Keep task", null)).getId();
 
         entityManager.clear();
-        projectService.delete(removed.getId());
+        projectService.delete(1L, removed.getId());
         entityManager.flush();
         // Database cascades do not refresh entities already held in JPA's cache.
         entityManager.clear();
@@ -100,7 +100,7 @@ class TaskRepositoryTests {
 
     @Test
     void databaseRejectsInvalidStatus() {
-        Project project = projects.saveAndFlush(new Project("Status constraint", null));
+        Project project = projects.saveAndFlush(new Project("Status constraint", null, com.huyho.taskflow.user.User.reference(1L)));
         assertThatThrownBy(() -> jdbc.update("""
                 INSERT INTO tasks (project_id, title, status, created_at)
                 VALUES (?, 'Invalid status', 'UNKNOWN', CURRENT_TIMESTAMP)
@@ -109,7 +109,7 @@ class TaskRepositoryTests {
 
     @Test
     void databaseRejectsInvalidPriority() {
-        Project project = projects.saveAndFlush(new Project("Priority constraint", null));
+        Project project = projects.saveAndFlush(new Project("Priority constraint", null, com.huyho.taskflow.user.User.reference(1L)));
         assertThatThrownBy(() -> jdbc.update("""
                 INSERT INTO tasks (project_id, title, priority, created_at)
                 VALUES (?, 'Invalid priority', 'URGENT', CURRENT_TIMESTAMP)
@@ -118,7 +118,7 @@ class TaskRepositoryTests {
 
     @Test
     void databaseRejectsBlankTitle() {
-        Project project = projects.saveAndFlush(new Project("Title constraint", null));
+        Project project = projects.saveAndFlush(new Project("Title constraint", null, com.huyho.taskflow.user.User.reference(1L)));
         assertThatThrownBy(() -> tasks.saveAndFlush(new Task(project, "   ", null)))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }

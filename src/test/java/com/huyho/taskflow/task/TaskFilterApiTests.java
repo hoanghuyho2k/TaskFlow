@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@org.springframework.security.test.context.support.WithMockUser
+@org.springframework.security.test.context.support.WithMockUser(username = "1")
 @org.springframework.test.context.ActiveProfiles("test")
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -35,8 +35,8 @@ class TaskFilterApiTests {
 
     @Test
     void filtersBeforePaginationAndNeverIncludesAnotherProjectsTasks() throws Exception {
-        Project project = projects.saveAndFlush(new Project("Filters", null));
-        Project other = projects.saveAndFlush(new Project("Other", null));
+        Project project = projects.saveAndFlush(new Project("Filters", null, com.huyho.taskflow.user.User.reference(1L)));
+        Project other = projects.saveAndFlush(new Project("Other", null, com.huyho.taskflow.user.User.reference(1L)));
         Long first = addTask(project, TaskStatus.DONE, TaskPriority.HIGH).getId();
         Long second = addTask(project, TaskStatus.DONE, TaskPriority.HIGH).getId();
         addTask(project, TaskStatus.TODO, TaskPriority.HIGH);

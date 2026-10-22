@@ -23,48 +23,49 @@ public class TaskService {
     }
 
     @Transactional
-    public TaskResponse create(Long projectId, CreateTaskRequest request) {
-        Project project = projects.findById(projectId)
+    public TaskResponse create(Long ownerId, Long projectId, CreateTaskRequest request) {
+        Project project = projects.findByIdAndOwnerId(projectId, ownerId)
                 .orElseThrow(() -> new ProjectNotFoundException(projectId));
         Task task = new Task(project, request.title().strip(), request.description());
         return TaskResponse.from(tasks.save(task));
     }
 
     @Transactional(readOnly = true)
-    public TaskResponse getById(Long id) {
-        return TaskResponse.from(findTask(id));
+    public TaskResponse getById(Long ownerId, Long id) {
+        return TaskResponse.from(findTask(ownerId, id));
     }
 
     @Transactional
-    public TaskResponse update(Long id, UpdateTaskRequest request) {
-        Task task = findTask(id);
+    public TaskResponse update(Long ownerId, Long id, UpdateTaskRequest request) {
+        Task task = findTask(ownerId, id);
         task.updateDetails(request.title().strip(), request.description(), request.priority());
         return TaskResponse.from(task);
     }
 
     @Transactional
-    public TaskResponse changeStatus(Long id, ChangeTaskStatusRequest request) {
-        Task task = findTask(id);
+    public TaskResponse changeStatus(Long ownerId, Long id, ChangeTaskStatusRequest request) {
+        Task task = findTask(ownerId, id);
         task.changeStatus(request.status());
         return TaskResponse.from(task);
     }
 
     @Transactional
-    public void delete(Long id) {
-        tasks.delete(findTask(id));
+    public void delete(Long ownerId, Long id) {
+        tasks.delete(findTask(ownerId, id));
     }
 
-    private Task findTask(Long id) {
-        return tasks.findById(id).orElseThrow(() -> new TaskNotFoundException(id));
+    private Task findTask(Long ownerId, Long id) {
+        return tasks.findByIdAndProjectOwnerId(id, ownerId).orElseThrow(() -> new TaskNotFoundException(id));
     }
 
     @Transactional(readOnly = true)
-    public TaskPageResponse list(Long projectId, int page, int size, TaskStatus status, TaskPriority priority) {
-        if (!projects.existsById(projectId)) {
+    public TaskPageResponse list(Long ownerId, Long projectId, int page, int size, TaskStatus status, TaskPriority priority) {
+        if (!projects.existsByIdAndOwnerId(projectId, ownerId)) {
             throw new ProjectNotFoundException(projectId);
         }
         Specification<Task> filter = (root, query, builder) ->
-                builder.equal(root.get("project").get("id"), projectId);
+                builder.and(builder.equal(root.get("project").get("id"), projectId),
+                        builder.equal(root.get("project").get("owner").get("id"), ownerId));
         if (status != null) {
             filter = filter.and((root, query, builder) -> builder.equal(root.get("status"), status));
         }

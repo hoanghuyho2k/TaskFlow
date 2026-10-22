@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@org.springframework.security.test.context.support.WithMockUser
+@org.springframework.security.test.context.support.WithMockUser(username = "1")
 @org.springframework.test.context.ActiveProfiles("test")
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -31,7 +31,7 @@ class TaskMutationApiTests {
     @Autowired private EntityManager entityManager;
 
     private Task createTask() {
-        Project project = projects.saveAndFlush(new Project("Mutation project", null));
+        Project project = projects.saveAndFlush(new Project("Mutation project", null, com.huyho.taskflow.user.User.reference(1L)));
         Task task = tasks.saveAndFlush(new Task(project, "Original", "Keep description"));
         entityManager.clear();
         return tasks.findById(task.getId()).orElseThrow();

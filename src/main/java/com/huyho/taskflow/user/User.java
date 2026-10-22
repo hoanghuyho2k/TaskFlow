@@ -36,6 +36,12 @@ public class User {
     protected User() {
     }
 
+    public static User reference(Long id) {
+        User reference = new User();
+        reference.id = Objects.requireNonNull(id, "User id is required");
+        return reference;
+    }
+
     // The caller must encode the password before constructing a User.
     public User(String email, String displayName, String passwordHash) {
         this.email = normalizeEmail(email);

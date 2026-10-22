@@ -27,7 +27,7 @@ class ProjectRepositoryTests {
     @Test
     void savesAndReloadsProjectFromPostgres() {
         Instant beforeSave = Instant.now().truncatedTo(ChronoUnit.SECONDS);
-        Project saved = repository.saveAndFlush(new Project("TaskFlow", "Backend portfolio"));
+        Project saved = repository.saveAndFlush(new Project("TaskFlow", "Backend portfolio", com.huyho.taskflow.user.User.reference(1L)));
         Long id = saved.getId();
 
         // Clear the first-level cache so findById reads the database.
@@ -42,7 +42,7 @@ class ProjectRepositoryTests {
 
     @Test
     void permitsMissingDescription() {
-        Project saved = repository.saveAndFlush(new Project("Minimal project", null));
+        Project saved = repository.saveAndFlush(new Project("Minimal project", null, com.huyho.taskflow.user.User.reference(1L)));
         entityManager.clear();
 
         assertThat(repository.findById(saved.getId()).orElseThrow().getDescription()).isNull();
@@ -50,7 +50,7 @@ class ProjectRepositoryTests {
 
     @Test
     void databaseRejectsBlankName() {
-        assertThatThrownBy(() -> repository.saveAndFlush(new Project("   ", null)))
+        assertThatThrownBy(() -> repository.saveAndFlush(new Project("   ", null, com.huyho.taskflow.user.User.reference(1L))))
                 .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
 }

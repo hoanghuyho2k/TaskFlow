@@ -9,6 +9,11 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
+import com.huyho.taskflow.user.User;
+import com.huyho.taskflow.user.UserRepository;
+import com.huyho.taskflow.task.Task;
+import com.huyho.taskflow.task.TaskRepository;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -17,7 +22,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@org.springframework.security.test.context.support.WithMockUser
+@org.springframework.security.test.context.support.WithMockUser(username = "1")
 @org.springframework.test.context.ActiveProfiles("test")
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -33,9 +38,47 @@ class ProjectApiTests {
     @Autowired
     private jakarta.persistence.EntityManager entityManager;
 
+    @Autowired
+    private UserRepository users;
+
+    @Autowired
+    private TaskRepository tasks;
+
+    @Test
+    void anotherUserCannotReadOrMutateProjectsOrTheirTasks() throws Exception {
+        Project owned = repository.saveAndFlush(new Project("Private project", null, User.reference(1L)));
+        Task privateTask = tasks.saveAndFlush(new Task(owned, "Private task", null));
+        User otherUser = users.saveAndFlush(new User("other-" + java.util.UUID.randomUUID() + "@example.com",
+                "Other user", "not-a-real-login-hash"));
+        var other = jwt().jwt(token -> token.subject(otherUser.getId().toString()));
+
+        mvc.perform(get("/api/projects/{id}", owned.getId()).with(other)).andExpect(status().isNotFound());
+        mvc.perform(put("/api/projects/{id}", owned.getId()).with(other)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Taken over\"}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(delete("/api/projects/{id}", owned.getId()).with(other)).andExpect(status().isNotFound());
+        mvc.perform(get("/api/projects/{id}/tasks", owned.getId()).with(other)).andExpect(status().isNotFound());
+        mvc.perform(post("/api/projects/{id}/tasks", owned.getId()).with(other)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"Unauthorized\"}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/tasks/{id}", privateTask.getId()).with(other)).andExpect(status().isNotFound());
+        mvc.perform(put("/api/tasks/{id}", privateTask.getId()).with(other)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"Taken over\",\"priority\":\"HIGH\"}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
+                        "/api/tasks/{id}/status", privateTask.getId()).with(other)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"DONE\"}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(delete("/api/tasks/{id}", privateTask.getId()).with(other)).andExpect(status().isNotFound());
+        assertThat(tasks.findById(privateTask.getId())).isPresent();
+        mvc.perform(get("/api/projects").with(other))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.content").isEmpty());
+    }
+
     @Test
     void updatesStoredDetailsAndPreservesCreationTime() throws Exception {
-        Project project = repository.saveAndFlush(new Project("Original", "Original description"));
+        Project project = repository.saveAndFlush(new Project("Original", "Original description", com.huyho.taskflow.user.User.reference(1L)));
         Long id = project.getId();
         entityManager.clear();
         java.time.Instant createdAt = repository.findById(id).orElseThrow().getCreatedAt();
@@ -54,7 +97,7 @@ class ProjectApiTests {
 
     @Test
     void invalidUpdateLeavesStoredProjectUnchanged() throws Exception {
-        Project project = repository.saveAndFlush(new Project("Original", "Keep this"));
+        Project project = repository.saveAndFlush(new Project("Original", "Keep this", com.huyho.taskflow.user.User.reference(1L)));
         mvc.perform(put("/api/projects/{id}", project.getId()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"   \"}"))
                 .andExpect(status().isBadRequest());
@@ -64,7 +107,7 @@ class ProjectApiTests {
 
     @Test
     void deletesProjectAndReturnsNotFoundAfterward() throws Exception {
-        Long id = repository.saveAndFlush(new Project("Delete me", null)).getId();
+        Long id = repository.saveAndFlush(new Project("Delete me", null, com.huyho.taskflow.user.User.reference(1L))).getId();
         mvc.perform(delete("/api/projects/{id}", id))
                 .andExpect(status().isNoContent())
                 .andExpect(content().string(""));
@@ -85,9 +128,11 @@ class ProjectApiTests {
     @Test
     void listsProjectsWithPaginationAndStableOrdering() throws Exception {
         // Existing manual projects may be present; compare with the actual ordered IDs.
-        repository.saveAndFlush(new Project("First test project", null));
-        repository.saveAndFlush(new Project("Second test project", null));
-        var ordered = repository.findAll(org.springframework.data.domain.Sort.by("id"));
+        repository.saveAndFlush(new Project("First test project", null, com.huyho.taskflow.user.User.reference(1L)));
+        repository.saveAndFlush(new Project("Second test project", null, com.huyho.taskflow.user.User.reference(1L)));
+        var ordered = repository.findAllByOwnerId(1L,
+                org.springframework.data.domain.PageRequest.of(0, 1000, org.springframework.data.domain.Sort.by("id")))
+                .getContent();
         mvc.perform(get("/api/projects").param("page", "0").param("size", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))

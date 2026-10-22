@@ -36,6 +36,6 @@ public class LoginService {
                 .issuedAt(now).expiresAt(now.plusSeconds(900)).build();
         String token = encoder.encode(JwtEncoderParameters.from(
                 JwsHeader.with(MacAlgorithm.HS256).build(), claims)).getTokenValue();
-        return new LoginResponse(token, "Bearer", 900);
+        return new LoginResponse(token, "Bearer", 900, user.getDisplayName());
     }
 }

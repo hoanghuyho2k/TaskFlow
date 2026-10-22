@@ -18,7 +18,8 @@ public class SecurityConfiguration {
         http.csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/register", "/api/auth/login", "/actuator/health", "/actuator/health/**",
+                        .requestMatchers("/", "/index.html", "/styles.css", "/app.js", "/favicon.ico",
+                                "/api/auth/register", "/api/auth/login", "/actuator/health", "/actuator/health/**",
                                 "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .anyRequest().authenticated());
         var entryPoint = (org.springframework.security.web.AuthenticationEntryPoint) (request, response, exception) -> {

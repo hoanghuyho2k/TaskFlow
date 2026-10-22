@@ -40,6 +40,7 @@ class LoginApiTests {
                         .content("{\"email\":\" LOGIN-TEST@EXAMPLE.COM \",\"password\":\"Example-password-123!\"}"))
                 .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.displayName").value("Learner"))
                 .andExpect(jsonPath("$.expiresIn").value(900)).andReturn().getResponse().getContentAsString();
         String token = mapper.readTree(body).get("accessToken").asText();
         Jwt jwt = decoder.decode(token);

@@ -16,5 +16,19 @@ services:
       retries: 10
       start_period: 10s
 
+  app:
+    profiles: [demo]
+    build: .
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/taskflow
+      DB_USERNAME: taskflow
+      DB_PASSWORD: taskflow_local
+      JWT_SECRET: ${JWT_SECRET:-}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   postgres_data:
