@@ -26,7 +26,7 @@ public class TaskService {
     public TaskResponse create(Long ownerId, Long projectId, CreateTaskRequest request) {
         Project project = projects.findByIdAndOwnerId(projectId, ownerId)
                 .orElseThrow(() -> new ProjectNotFoundException(projectId));
-        Task task = new Task(project, request.title().strip(), request.description());
+        Task task = new Task(project, request.title().strip(), request.description(), request.status(), request.priority());
         return TaskResponse.from(tasks.save(task));
     }
 

@@ -51,9 +51,15 @@ public class Task {
     }
 
     public Task(Project project, String title, String description) {
+        this(project, title, description, TaskStatus.TODO, TaskPriority.MEDIUM);
+    }
+
+    public Task(Project project, String title, String description, TaskStatus status, TaskPriority priority) {
         this.project = Objects.requireNonNull(project, "Project is required");
         this.title = title;
         this.description = description;
+        this.status = status == null ? TaskStatus.TODO : status;
+        this.priority = priority == null ? TaskPriority.MEDIUM : priority;
     }
 
     @PrePersist
