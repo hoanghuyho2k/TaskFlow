@@ -2,11 +2,15 @@ package com.huyho.taskflow.project;
 
 import java.time.Instant;
 
+import com.huyho.taskflow.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
@@ -24,6 +28,10 @@ public class Project {
     @Column(length = 2000)
     private String description;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_id", updatable = false)
+    private User owner;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -31,9 +39,10 @@ public class Project {
     protected Project() {
     }
 
-    public Project(String name, String description) {
+    public Project(String name, String description, User owner) {
         this.name = name;
         this.description = description;
+        this.owner = java.util.Objects.requireNonNull(owner, "Project owner is required");
     }
 
     @PrePersist
@@ -60,5 +69,9 @@ public class Project {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public User getOwner() {
+        return owner;
     }
 }

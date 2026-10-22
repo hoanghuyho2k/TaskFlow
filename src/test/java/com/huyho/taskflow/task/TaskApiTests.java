@@ -19,7 +19,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@org.springframework.security.test.context.support.WithMockUser
+@org.springframework.security.test.context.support.WithMockUser(username = "1")
 @org.springframework.test.context.ActiveProfiles("test")
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -33,7 +33,7 @@ class TaskApiTests {
 
     @Test
     void createsAndRetrievesTaskWithDefaults() throws Exception {
-        Long projectId = projects.saveAndFlush(new Project("API task project", null)).getId();
+        Long projectId = projects.saveAndFlush(new Project("API task project", null, com.huyho.taskflow.user.User.reference(1L))).getId();
         String location = mvc.perform(post("/api/projects/{id}/tasks", projectId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"title\":\"  Build API  \",\"description\":\"Implement endpoints\"}"))
@@ -56,7 +56,7 @@ class TaskApiTests {
 
     @Test
     void permitsMissingDescription() throws Exception {
-        Long id = projects.saveAndFlush(new Project("Optional description", null)).getId();
+        Long id = projects.saveAndFlush(new Project("Optional description", null, com.huyho.taskflow.user.User.reference(1L))).getId();
         mvc.perform(post("/api/projects/{id}/tasks", id).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"title\":\"Minimal task\"}"))
                 .andExpect(status().isCreated());
@@ -64,8 +64,8 @@ class TaskApiTests {
 
     @Test
     void listsOnlyRequestedProjectsTasksInPages() throws Exception {
-        Project first = projects.saveAndFlush(new Project("First project", null));
-        Project second = projects.saveAndFlush(new Project("Second project", null));
+        Project first = projects.saveAndFlush(new Project("First project", null, com.huyho.taskflow.user.User.reference(1L)));
+        Project second = projects.saveAndFlush(new Project("Second project", null, com.huyho.taskflow.user.User.reference(1L)));
         Long firstId = tasks.saveAndFlush(new Task(first, "First task", null)).getId();
         Long nextId = tasks.saveAndFlush(new Task(first, "Next task", null)).getId();
         tasks.saveAndFlush(new Task(second, "Other task", null));
@@ -84,7 +84,7 @@ class TaskApiTests {
 
     @Test
     void returnsEmptyPageForExistingProjectWithoutTasks() throws Exception {
-        Long id = projects.saveAndFlush(new Project("Empty project", null)).getId();
+        Long id = projects.saveAndFlush(new Project("Empty project", null, com.huyho.taskflow.user.User.reference(1L))).getId();
         mvc.perform(get("/api/projects/{id}/tasks", id))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.content").isEmpty())
                 .andExpect(jsonPath("$.totalElements").value(0));
@@ -111,7 +111,7 @@ class TaskApiTests {
     @ParameterizedTest
     @ValueSource(strings = {"{}", "{\"title\":null}", "{\"title\":\"   \"}", "{\"title\":\"\\t\\n\"}"})
     void rejectsInvalidTitleWithoutWriting(String body) throws Exception {
-        Long id = projects.saveAndFlush(new Project("Validation project", null)).getId();
+        Long id = projects.saveAndFlush(new Project("Validation project", null, com.huyho.taskflow.user.User.reference(1L))).getId();
         long before = tasks.count();
         mvc.perform(post("/api/projects/{id}/tasks", id).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.errors[0].field").value("title"));
@@ -120,7 +120,7 @@ class TaskApiTests {
 
     @Test
     void rejectsOversizedFieldsAndMalformedJson() throws Exception {
-        Long id = projects.saveAndFlush(new Project("Limits project", null)).getId();
+        Long id = projects.saveAndFlush(new Project("Limits project", null, com.huyho.taskflow.user.User.reference(1L))).getId();
         for (String body : new String[]{"{", "{\"title\":\"" + "a".repeat(201) + "\"}",
                 "{\"title\":\"Valid\",\"description\":\"" + "a".repeat(5001) + "\"}"}) {
             mvc.perform(post("/api/projects/{id}/tasks", id).contentType(MediaType.APPLICATION_JSON).content(body))
@@ -141,7 +141,7 @@ class TaskApiTests {
     @ParameterizedTest
     @ValueSource(strings = {"page=-1", "size=0", "size=101", "page=abc"})
     void rejectsInvalidPagination(String query) throws Exception {
-        Long id = projects.saveAndFlush(new Project("Pagination project", null)).getId();
+        Long id = projects.saveAndFlush(new Project("Pagination project", null, com.huyho.taskflow.user.User.reference(1L))).getId();
         mvc.perform(get("/api/projects/" + id + "/tasks?" + query)).andExpect(status().isBadRequest());
     }
 }

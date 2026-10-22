@@ -20,6 +20,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.Authentication;
+import com.huyho.taskflow.config.AuthenticatedUser;
 
 @Tag(name = "Tasks")
 @ApiResponses({
@@ -40,31 +42,31 @@ public class TaskController {
     @Operation(summary = "Retrieve a Task")
     @ApiResponse(responseCode = "200", description = "Success", useReturnTypeSchema = true)
     @GetMapping("/{id}")
-    public TaskResponse getById(@PathVariable @Positive Long id) {
-        return service.getById(id);
+    public TaskResponse getById(Authentication authentication, @PathVariable @Positive Long id) {
+        return service.getById(AuthenticatedUser.id(authentication), id);
     }
 
     @Operation(summary = "Replace title description and priority; preserve status")
     @ApiResponse(responseCode = "200", description = "Success", useReturnTypeSchema = true)
     @PutMapping("/{id}")
-    public TaskResponse update(@PathVariable @Positive Long id,
+    public TaskResponse update(Authentication authentication, @PathVariable @Positive Long id,
                                @Valid @RequestBody UpdateTaskRequest request) {
-        return service.update(id, request);
+        return service.update(AuthenticatedUser.id(authentication), id, request);
     }
 
     @Operation(summary = "Change status; all transitions including reopening are allowed")
     @ApiResponse(responseCode = "200", description = "Success", useReturnTypeSchema = true)
     @PatchMapping("/{id}/status")
-    public TaskResponse changeStatus(@PathVariable @Positive Long id,
+    public TaskResponse changeStatus(Authentication authentication, @PathVariable @Positive Long id,
                                      @Valid @RequestBody ChangeTaskStatusRequest request) {
-        return service.changeStatus(id, request);
+        return service.changeStatus(AuthenticatedUser.id(authentication), id, request);
     }
 
     @Operation(summary = "Delete a Task; preserve its Project")
     @ApiResponse(responseCode = "204", description = "No Content", content = @Content)
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable @Positive Long id) {
-        service.delete(id);
+    public ResponseEntity<Void> delete(Authentication authentication, @PathVariable @Positive Long id) {
+        service.delete(AuthenticatedUser.id(authentication), id);
         return ResponseEntity.noContent().build();
     }
 }

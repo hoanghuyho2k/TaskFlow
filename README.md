@@ -1,13 +1,19 @@
 # TaskFlow
 
-TaskFlow is a Java and Spring Boot project-management backend built as an
-incremental backend engineering portfolio and learning project. It demonstrates
-layered REST APIs, relational persistence, transactions, validation, authentication,
-and automated testing. The aim is to understand and explain each design decision.
+TaskFlow is a full-stack project management demo with a responsive web interface
+and a Java/Spring Boot API. It demonstrates layered REST APIs, relational
+persistence, transactions, validation, authentication, and automated testing.
 
-This is a work in progress, not a production deployment. Authentication is implemented;
-Project ownership and membership authorization are not yet implemented. Every
-authenticated User can currently access every Project and Task.
+The project can run locally or be built as a Docker image. Project data is scoped
+to its owner. Projects created before ownership was added remain unassigned and
+are hidden from users after migration.
+
+## Run the demo
+
+The application serves the TaskFlow web interface at `/` and Swagger at
+`/swagger-ui/index.html`. A free demo deployment uses Render for the Docker web
+service and Neon for PostgreSQL. Keep database credentials private. The free web
+service sleeps after inactivity, so its first request can take about a minute.
 
 ## Implemented functionality
 
@@ -15,6 +21,8 @@ authenticated User can currently access every Project and Task.
 - Task CRUD within Projects, status changes, priority updates, and status/priority filters.
 - User registration with normalized unique emails and salted bcrypt password hashes.
 - Login with signed, 15-minute JWT bearer tokens; protected Project and Task endpoints.
+- Project ownership checks for Project and Task access.
+- Responsive web UI for account creation, project tracking, and task updates.
 - DTO validation and Problem Details responses for expected request errors.
 - Flyway migrations, PostgreSQL constraints, and transactional persistence.
 - OpenAPI documentation, Swagger UI, and Actuator health.
@@ -78,6 +86,44 @@ curl -i http://localhost:8080/actuator/health
 Expect 200 with `status: UP`. Stop Java with Ctrl+C. Stop PostgreSQL with
 `docker compose down`; adding `-v` intentionally deletes its data.
 
+### Run the containerized app
+
+```sh
+export JWT_SECRET="$(openssl rand -base64 32)"
+docker compose --profile demo up --build -d
+```
+
+Open http://localhost:8080. The demo profile uses the local Compose database
+credentials described above. For a hosted deployment, configure `DB_URL`,
+`DB_USERNAME`, `DB_PASSWORD`, and a stable Base64 `JWT_SECRET` in the host’s
+secret manager; use a managed PostgreSQL service and enable HTTPS at the host.
+The app container listens on port 8080 and runs as a non-root user.
+
+The GitHub Actions workflow is configured to run `./mvnw verify` and build the
+Docker image on pushes to `main` and on pull requests.
+
+### Deploy the free demo
+
+1. Create a PostgreSQL project on [Neon](https://neon.com/) and copy its direct
+   connection details. Select a region near Render's Singapore region if
+   available.
+2. In Render, create a Blueprint from this repository and select `render.yaml`.
+   Render creates the free Docker web service and generates a stable `JWT_SECRET`.
+3. In the Render service's Environment settings, set `DB_URL` to the Neon
+   connection URL, changing its scheme from `postgresql://` to
+   `jdbc:postgresql://` and retaining `?sslmode=require`. Set `DB_USERNAME` and
+   `DB_PASSWORD` from the same Neon connection details. Do not commit these
+   values to GitHub.
+4. Save the environment values and redeploy. Flyway applies the schema
+   migrations on startup. Wait for `/actuator/health` to report `UP`, then open
+   the service's `onrender.com` URL and register a demo account.
+
+The Render Blueprint includes the public health check, free plan, and service
+region. The Render free filesystem is temporary, so all persistent application
+data must stay in Neon. Render's free web service may sleep and cold-start; Neon
+also enforces free-plan usage limits. Check the providers' current limits before
+sharing the demo widely.
+
 ## Explore the API
 
 - Swagger UI: http://localhost:8080/swagger-ui/index.html
@@ -133,14 +179,15 @@ With PostgreSQL running:
 ./mvnw verify
 ```
 
-The suite currently has 95 tests covering persistence, constraints, CRUD, validation,
+The suite currently has 96 tests covering persistence, constraints, CRUD, validation,
 filtering, password handling, login, invalid/tampered/expired tokens, and OpenAPI.
 Integration-style tests use the local Compose database and roll back test writes;
 ID sequences can still advance. The test profile supplies a clearly labelled
 test-only signing key. MockMvc domain tests use authenticated test callers; dedicated
 login tests exercise real JWT validation through the security filter chain.
-Testcontainers isolation and CI are future work. Do not run these tests against a
-production database.
+The CI workflow runs the suite against a PostgreSQL 17 service. Local integration
+tests use the Compose database and roll back test writes; do not run them against
+production.
 
 ## Project structure
 
@@ -162,10 +209,10 @@ docs/           Authentication guides
 
 ## Current limitations and roadmap
 
-- Next: Project ownership, membership authorization, and Task assignment.
-- Then: isolated PostgreSQL tests with Testcontainers and CI checks.
+- Next: Project membership and Task assignment.
+- Then: isolated PostgreSQL tests with Testcontainers.
 - Later: caching with Redis, domain events with Kafka, retries/idempotency,
-  notifications/activity, containerized application deployment, and AWS.
+  notifications/activity, and production deployment hardening.
 - No refresh tokens, immediate token revocation, or per-request deleted-User check yet.
 - Login rate limiting, production TLS/secrets handling, and observability need deployment work.
 - Concurrent updates use last-write-wins; optimistic locking is not implemented.

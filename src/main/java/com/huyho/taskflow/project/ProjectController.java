@@ -25,6 +25,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.security.core.Authentication;
+import com.huyho.taskflow.config.AuthenticatedUser;
 
 @Tag(name = "Projects")
 @ApiResponses({
@@ -45,40 +47,41 @@ public class ProjectController {
     @Operation(summary = "Create a Project")
     @ApiResponse(responseCode = "201", description = "Created", useReturnTypeSchema = true)
     @PostMapping
-    public ResponseEntity<ProjectResponse> create(@Valid @RequestBody CreateProjectRequest request) {
-        ProjectResponse project = service.create(request);
+    public ResponseEntity<ProjectResponse> create(Authentication authentication, @Valid @RequestBody CreateProjectRequest request) {
+        ProjectResponse project = service.create(AuthenticatedUser.id(authentication), request);
         return ResponseEntity.created(URI.create("/api/projects/" + project.id())).body(project);
     }
 
     @Operation(summary = "Retrieve a Project")
     @ApiResponse(responseCode = "200", description = "Success", useReturnTypeSchema = true)
     @GetMapping("/{id}")
-    public ProjectResponse getById(@PathVariable @Positive Long id) {
-        return service.getById(id);
+    public ProjectResponse getById(Authentication authentication, @PathVariable @Positive Long id) {
+        return service.getById(AuthenticatedUser.id(authentication), id);
     }
 
     @Operation(summary = "List Projects")
     @ApiResponse(responseCode = "200", description = "Success", useReturnTypeSchema = true)
     @GetMapping
-    public ProjectPageResponse list(
+    public ProjectPageResponse list(Authentication authentication,
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
-        return service.list(page, size);
+        return service.list(AuthenticatedUser.id(authentication), page, size);
     }
 
     @Operation(summary = "Replace Project details")
     @ApiResponse(responseCode = "200", description = "Success", useReturnTypeSchema = true)
     @PutMapping("/{id}")
-    public ProjectResponse update(@PathVariable @Positive Long id,
+    public ProjectResponse update(Authentication authentication, @PathVariable @Positive Long id,
                                   @Valid @RequestBody UpdateProjectRequest request) {
-        return service.update(id, request);
+        return service.update(AuthenticatedUser.id(authentication), id, request);
     }
 
     @Operation(summary = "Delete a Project and its Tasks")
     @ApiResponse(responseCode = "204", description = "No Content", content = @Content)
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable @Positive Long id) {
-        service.delete(id);
+    public ResponseEntity<Void> delete(Authentication authentication, @PathVariable @Positive Long id) {
+        service.delete(AuthenticatedUser.id(authentication), id);
         return ResponseEntity.noContent().build();
     }
+
 }

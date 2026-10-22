@@ -8,4 +8,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 public interface TaskRepository extends JpaRepository<Task, Long>, JpaSpecificationExecutor<Task> {
 
     Page<Task> findByProjectId(Long projectId, Pageable pageable);
+    java.util.Optional<Task> findByIdAndProjectOwnerId(Long id, Long ownerId);
+    Page<Task> findAllByProjectIdAndProjectOwnerId(Long projectId, Long ownerId, Pageable pageable);
+    boolean existsByProjectIdAndProjectOwnerId(Long projectId, Long ownerId);
 }
