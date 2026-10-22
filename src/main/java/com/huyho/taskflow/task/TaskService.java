@@ -39,6 +39,9 @@ public class TaskService {
     public TaskResponse update(Long ownerId, Long id, UpdateTaskRequest request) {
         Task task = findTask(ownerId, id);
         task.updateDetails(request.title().strip(), request.description(), request.priority());
+        if (request.status() != null) {
+            task.changeStatus(request.status());
+        }
         return TaskResponse.from(task);
     }
 
